@@ -10,8 +10,9 @@ from django.contrib.syndication.feeds import Feed
 from django.contrib.auth.models import User , Group
 from django.conf import settings
 from django.views.generic.list_detail import object_list
+from django.shortcuts import get_object_or_404
 
-from  datetime  import datetime
+from  datetime  import datetime, timedelta
 import logging
 import simplejson
 
@@ -71,9 +72,8 @@ def index_page(request):
     totaltopics = Ftopics.objects.count()
     totalposts = totaltopics + Reply.objects.count()
     totalusers =  User.objects.count()
-    import datetime
-    now = datetime.datetime.now()
-    users_online = DinetteUserProfile.objects.filter(last_activity__gte =  now - datetime.timedelta(seconds = 900)).count()
+    now = datetime.now()
+    users_online = DinetteUserProfile.objects.filter(last_activity__gte =  now - timedelta(seconds = 900)).count() + 1#The current user is always online. :)
     last_registered_user = User.objects.order_by('-date_joined')[0]
     try:
         user_access_list = int(accesslist)
@@ -89,13 +89,14 @@ def index_page(request):
 def category_details(request, categoryslug,  pageno=1) :
     mlogger.info("In the welcome page.......................")
     mlogger.debug("Type of request.user %s" % type(request)  )   
-    #buid a form for posting topics
+    #build a form for posting topics
     topicform = FtopicForm()
-    category = Category.objects.get(slug=categoryslug)
-    queryset = Ftopics.objects.filter(category__id__exact = category.id)    
-    paginator = Paginator(queryset,settings.TOPIC_PAGE_SIZE)
-    topiclist = paginator.page(pageno)
-    return render_to_response("dinette/home.html", {'topicform': topicform,'category':category,'authenticated':request.user.is_authenticated(),'topic_list':topiclist},RequestContext(request))
+    category = get_object_or_404(Category, slug=categoryslug)
+    queryset = Ftopics.objects.filter(category__id__exact = category.id)
+    topiclist = queryset    
+    topic_page_size = getattr(settings , "TOPIC_PAGE_SIZE", 10)
+    payload = {'topicform': topicform,'category':category,'authenticated':request.user.is_authenticated(),'topic_list':topiclist, "topic_page_size": topic_page_size}
+    return render_to_response("dinette/category_details.html", payload, RequestContext(request))
     
     
        
@@ -112,10 +113,10 @@ def topic_detail(request, categoryslug, topic_slug , pageno = 1):
     topic.viewcount = topic.viewcount + 1
     topic.save()
     #we also need to display the reply form
-    paginator = Paginator(topic.reply_set.all(),settings.REPLY_PAGE_SIZE)
-    replylist = paginator.page(pageno)
+    replylist = topic.reply_set.all()
+    reply_page_size = getattr(settings , "REPLY_PAGE_SIZE", 10)
     replyform = ReplyForm()
-    payload = {'topic': topic, 'replyform':replyform,'reply_list':replylist, 'show_moderation_items':show_moderation_items}
+    payload = {'topic': topic, 'replyform':replyform,'reply_list':replylist, 'show_moderation_items':show_moderation_items, "reply_page_size": reply_page_size}
     return render_to_response("dinette/topic_detail.html", payload, RequestContext(request))
 
 @login_required
@@ -334,8 +335,11 @@ def moderate_topic(request, topic_id, action):
                 message = '%s has been stickied.' % topic.subject
             topic.is_sticky = not topic.is_sticky
         elif action == 'hide':
-            topic.is_hidden = True
-            message = '%s has been hidden and wont show up any further.' % topic.subject
+            if topic.is_hidden:
+                message = '%s has been unhidden.' % topic.subject
+            else:
+                message = "%s has been hidden and won't show up any further." % topic.subject
+            topic.is_hidden = not topic.is_hidden
         topic.save()
         payload = {'topic_id':topic.pk, 'message':message}
         resp = simplejson.dumps(payload)
@@ -351,7 +355,7 @@ def login(request):
         return login(request)
         
 def user_profile(request, user_name):
-    user_profile = User.objects.get(username = user_name)
+    user_profile =get_object_or_404(User, username = user_name)
     return render_to_response('dinette/user_profile.html', {}, RequestContext(request, {'user_profile': user_profile}))
     
     

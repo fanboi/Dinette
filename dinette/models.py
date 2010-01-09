@@ -35,6 +35,8 @@ class SuperCategory(models.Model):
     accessgroups  = models.ManyToManyField(Group,related_name='can_access_forums')
     
     class Meta:
+        verbose_name = "Super Category"
+        verbose_name_plural = "Super Categories"
         ordering = ('-ordering', 'created_on')
         
     def __unicode__(self):
@@ -51,6 +53,12 @@ class Category(models.Model):
     updated_on = models.DateTimeField(auto_now=True)
     posted_by = models.ForeignKey(User, related_name='cposted')
     moderated_by = models.ManyToManyField(User, related_name='moderaters')
+    
+    class Meta:
+        verbose_name = "Category"
+        verbose_name_plural = "Categories"
+        ordering = ('ordering','-created_on' )    
+    
     
     def save(self, *args, **kwargs):
         if not self.slug:
@@ -100,20 +108,22 @@ class Category(models.Model):
         if (obj.reply_set.count() > 0 ):
             return obj.reply_set.order_by("-created_on")[0]
         else :
-            return obj
-        
-    
-    
-    class Meta:
-        ordering = ('ordering','-created_on' )    
+            return obj  
     
     def __unicode__(self):
         return self.name 
+    
+class TopicManager(models.Manager):
+    def get_query_set(self):
+        return super(TopicManager, self).get_query_set().filter(is_hidden = False)
+    
 
 class Ftopics(models.Model):
     category = models.ForeignKey(Category)
-    subject = models.CharField(max_length=1024)
-    slug = models.SlugField(max_length = 1034) 
+    posted_by = models.ForeignKey(User)
+    
+    subject = models.CharField(max_length=999)
+    slug = models.SlugField(max_length = 200, db_index = True) 
     message = models.TextField()
     file = models.FileField(upload_to='dinette/files',default='',null=True,blank=True)
     attachment_type = models.CharField(max_length=20,default='nofile')
@@ -122,20 +132,29 @@ class Ftopics(models.Model):
     replies = models.IntegerField(default=0)    
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
-    posted_by = models.ForeignKey(User)
+    
+    last_reply_on = models.DateTimeField(auto_now_add=True)
+    num_replies = models.PositiveSmallIntegerField(default = 0)
+    
     #Moderation features
     announcement_flag = models.BooleanField(default=False)
     is_closed = models.BooleanField(default=False)
     is_sticky = models.BooleanField(default=False)
     is_hidden = models.BooleanField(default=False)
     
+    default = models.Manager()
+    objects = TopicManager()
+    
     class Meta:
-        ordering = ('-is_sticky', '-updated_on',)
+        ordering = ('-is_sticky', '-last_reply_on',)
         get_latest_by = ('created_on')
+        verbose_name = "Topic"
+        verbose_name_plural = "Topics"
         
     def save(self, *args, **kwargs):
         if not self.slug:
             slug = slugify(self.subject)
+            slug = slug[:198]
             same_slug_count = Ftopics.objects.filter(slug__startswith = slug).count()
             if same_slug_count:
                 slug = slug + str(same_slug_count)
@@ -176,18 +195,29 @@ class Ftopics(models.Model):
 
 # Create Replies for a topic
 class Reply(models.Model):
+    topic = models.ForeignKey(Ftopics)
+    posted_by = models.ForeignKey(User)
+    
     message = models.TextField()
     file = models.FileField(upload_to='dinette/files',default='',null=True,blank=True)
     attachment_type = models.CharField(max_length=20,default='nofile')
     filename = models.CharField(max_length=100,default="dummyname.txt")
+    
+    reply_number = models.SmallIntegerField()
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
-    topic = models.ForeignKey(Ftopics)
-    posted_by = models.ForeignKey(User)
+    
     
     class Meta:
+        verbose_name = "Reply"
+        verbose_name_plural = "Replies"
         ordering = ('created_on',)
         get_latest_by = ('created_on', )
+        
+    def save(self, *args, **kwargs):
+        if not self.pk:
+            self.reply_number = self.topic.reply_set.all().count() + 1
+        super(Reply, self).save(*args, **kwargs)
     
     def __unicode__(self):
         return self.message
@@ -196,6 +226,15 @@ class Reply(models.Model):
     @models.permalink
     def get_absolute_url(self):
         return ('dinette_topic_detail',(),{'categoryslug':self.topic.category.slug,'topic_slug': self.topic.slug})
+    
+    def get_url_with_fragment(self):
+        page = (self.reply_number-1)/settings.REPLY_PAGE_SIZE + 1
+        url =  self.get_absolute_url()
+        if not page == 1:
+            return "%s?page=%s#%s" % (url, page, self.reply_number)
+        else:
+            return "%s#%s" % (url, self.reply_number)
+            
     
     def htmlfrombbcode(self):
         soup = BeautifulSoup(self.message)
@@ -213,12 +252,15 @@ class Reply(models.Model):
         
         
 class DinetteUserProfile(models.Model):
-    user = models.ForeignKey(User)
+    user = models.ForeignKey(User, unique = True)
     last_activity = models.DateTimeField(auto_now_add=True)
     userrank = models.CharField(max_length=30,default="Junior Member")
     last_posttime = models.DateTimeField(auto_now_add=True)
     photo = models.ImageField(upload_to='dinette/files',null=True,blank=True)
     signature = models.CharField(max_length = 1000, null = True, blank = True)
+    
+    def __unicode__(self):
+        return self.user.username
     
     
     def get_total_posts(self):
@@ -244,6 +286,13 @@ class DinetteUserProfile(models.Model):
 def create_user_profile(sender, instance, created, **kwargs):
     if created:
         DinetteUserProfile.objects.create(user=instance)
+        
+def update_topic_on_reply(sender, instance, created, **kwargs):
+    if created:
+        instance.topic.last_reply_on = instance.created_on
+        instance.topic.num_replies += 1
+        instance.topic.save()
     
 post_save.connect(create_user_profile, sender=User)
+post_save.connect(update_topic_on_reply, sender=Reply)
 

@@ -2,6 +2,7 @@
 {% load thumbnail %} 
  
 <!-- div.post/even/replypost begins-->
+<a name="{{ reply.reply_number }}"></a>
 <div class="post even replypost">
   <!-- div p120560 begins-->
   <div id="p120560" class="posthead">
@@ -12,7 +13,7 @@
 		<a title="" href="#"></a>
 	  </span>
       <span class="post-link">
-	    <a class="permalink" rel="bookmark" title="Permanent link to this post" href="{{ reply.get_absolute_url }}">{{ reply.created_on|date:"jS F Y H:i A" }}</a>
+	    <a class="permalink" rel="bookmark" title="Permanent link to this post" href="{{ reply.get_url_with_fragment }}">{{ reply.created_on|date:"jS F Y H:i A" }}</a>
 	  </span> &nbsp; &nbsp; &nbsp;
 	</h3>
   </div>
@@ -30,7 +31,7 @@
 		    {% if reply.posted_by.get_profile.photo  %}
 		      <img src="{% thumbnail reply.posted_by.get_profile.photo 80x80 %}" />
 		    {% else %}                                                        
-		      <img src="http://www.gravatar.com/avatar/{{reply.posted_by.get_profile.getMD5}}.jpg" alt="" />
+		      <img src="http://www.gravatar.com/avatar/{{reply.posted_by.get_profile.getMD5}}.jpg" alt="{{reply.posted_by.username}}'s Photo" />
 		    {% endif %} 
 		  </td></tr>
 		  <tr><td>
@@ -71,7 +72,7 @@
 	<div class="post-entry">
 	  <h4 id="pc120560" class="entry-title hn">Re: {{reply.topic.subject}}</h4>
 	  <div class="entry-content">
-  	    <p>  {{ reply.htmlfrombbcode|safe }} .</p>
+  	    <p>  {{ reply.htmlfrombbcode|safe }}</p>
 	    {% with reply as rtopic %}    
 	      {% include 'dinette/attachement_frag.html' %}     
 	    {% endwith %}

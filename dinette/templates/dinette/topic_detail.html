@@ -7,6 +7,8 @@
 {% block content %}
 
 {% load thumbnail %} 
+{% load pagination_tags %}
+{% autopaginate reply_list reply_page_size %}
  
 <div id="replybox">
   <div id="actionbox">
@@ -29,7 +31,7 @@
   <div id="brd-crumbs-top" class="crumbs gen-content">
     <p>
 	  <span class="crumb crumbfirst">
-	    <a href="{% url dinette_category %}">Djorum Forums</a>
+	    <a href="{% url dinette_category %}">{{ config.name }}</a>
 	  </span> 
 	  <span class="crumb">
 		<span> &raquo; </span>
@@ -39,11 +41,14 @@
 		<span> &raquo; </span>
 		<a href="{{ topic.get_absolute_url }}">{{ topic.subject }} </a>
 	  </span> 
+	  
 	  &nbsp; &nbsp;
+	  {% if not topic.is_closed %}
 	  {% if user.is_authenticated %}
 		<a href="" onclick="return isUserAuthenticated(1)">Post Reply</a> &nbsp; &nbsp;
 	  {% else %}
 		(<a href="{% url dinette_login %}?next={{ topic.get_absolute_url }}">Login to Post Reply</a>) &nbsp; &nbsp;
+	  {% endif %}
 	  {% endif %}
          
 	  {% if reply_list.has_next %}
@@ -73,10 +78,10 @@
 	
   <!-- reply list begins -->
   <div id="replylist" class="main-content main-topic">
-	{% ifequal reply_list.number 1 %}
+	{% ifequal request.page 1 %}
 	  <!--post odd reply list begins -->
 	  <div class="post odd replypost">
-	    <div id="p120560" class="posthead">
+	    <div id="p{{ topic.pk }}" class="posthead">
 		  <h3 class="hn post-ident">
 			<span class="post-num"> </span> 
 			<span class="post-byline">
@@ -140,26 +145,27 @@
 	  <!-- post odd reply list ends -->
 	{% endifequal %}    
                 
-	{% for reply in reply_list.object_list %}
+	{% for reply in reply_list %}
 	  {% include 'dinette/replydetail_frag.html' %}
 	{% endfor %}
   </div>
 		
   <div  id="belowpostreplybox" class="crumbs gen-content">	
-	<a href="" onclick="return isUserAuthenticated(2)">Post Reply</a>
+  	
+	{% if not topic.is_closed %}
+	  {% if user.is_authenticated %}
+		<a href="#" onclick="return isUserAuthenticated(2)">Post Reply</a> &nbsp; &nbsp;
+	  {% else %}
+		(<a href="{% url dinette_login %}?next={{ topic.get_absolute_url }}">Login to Post Reply</a>) &nbsp; &nbsp;
+	  {% endif %}
+	  {% endif %}
 	
 	<span style='float: right;'>
-	  {% if reply_list.has_previous %}
-		<a href="{% url dinette_reply_detail_paged  topic.category.slug topic.slug  reply_list.previous_page_number %}"> Previous </a>
-		{% if reply_list.has_next %} | {% endif %}
-	  {% endif %}
-	
-	  {% if reply_list.has_next %}
-		<a href="{% url dinette_reply_detail_paged  topic.category.slug topic.slug   reply_list.next_page_number %}"> Next </a>              
-	  {% endif %}
+	 {% paginate %}
 	</span>
   </div>
   
+  {% if not topic.is_closed and user.is_authenticated %}
   <!-- formbox begins -->
   <div id="formbox" class="magicbox">
 	<form action="{% url dinette_postreply %}" method="POST" id="fpostreply"  >            
@@ -180,6 +186,7 @@
 	</form>
   </div>   
   <!-- formbox ends -->
+  {% endif %}
 	
   <div class="hr"><hr /></div>
   <div id="brd-about" class="gen-content">
