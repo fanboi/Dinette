@@ -1,0 +1,8 @@
+*.pyc
+*.log
+*.temp
+localsettings.py
+*secrets.py
+*secret.py
+*.wpr
+*.kpf
